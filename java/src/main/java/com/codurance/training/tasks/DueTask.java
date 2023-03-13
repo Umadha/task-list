@@ -26,6 +26,9 @@ public class DueTask {
               }
             }
         }
+        if(tasks.isEmpty()) {
+            System.out.println("No Task found");
+        }
         return tasks;
     }
 }

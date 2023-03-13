@@ -14,6 +14,9 @@ public class TasksByProject {
         for (Task task : addedProjects.get(projectName).getTasks()) {
             tasks.add(task);
         }
+        if(tasks.isEmpty()) {
+            System.out.println("No Task found");
+        }
         return tasks;
     }
 }

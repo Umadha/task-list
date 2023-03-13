@@ -1,25 +1,23 @@
 package com.codurance.training.tasks;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class FindTaskById {
+public class FindProjectByTask {
     Map<String, Project> addedProjects ;
 
-    public FindTaskById(Map<String, Project> addedProjects) {
+    public FindProjectByTask(Map<String, Project> addedProjects) {
         this.addedProjects = addedProjects;
     }
 
-    public Task getTask(String taskId){
+    public Project getProject(String taskId){
         for (Map.Entry<String, Project> project : addedProjects.entrySet()) {
             for (Task task : project.getValue().getTasks()) {
                 if (task.getId().equals(taskId)) {
-                    return task;
+                    return project.getValue();
                 }
             }
         }
-        System.out.printf("Could not find a task with an ID of %s.", taskId);
-        System.out.println();
+        System.out.println("No project found with this task.");
         return null;
     }
 }
