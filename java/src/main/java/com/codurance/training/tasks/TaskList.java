@@ -4,21 +4,17 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 public final class TaskList implements Runnable {
     private static final String QUIT = "quit";
-
-    private final Map<String, List<Task>> tasks = new LinkedHashMap<>();
+    private final Map<String, Project> addedProjects = new LinkedHashMap<>();
     private final BufferedReader in;
     private final PrintWriter out;
 
-    private long lastId = 0;
-
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
         PrintWriter out = new PrintWriter(System.out);
         new TaskList(in, out).run();
@@ -54,13 +50,84 @@ public final class TaskList implements Runnable {
                 show();
                 break;
             case "add":
-                add(commandRest[1]);
+                String[] subcommandRest = commandRest[1].split(" ", 2);
+                String subcommand = subcommandRest[0];
+
+                if (subcommand.equals("project")) {
+                    addedProjects.put(subcommandRest[1], new Project(subcommandRest[1]));
+                } else if (subcommand.equals("task")) {
+                    String[] projectTask = subcommandRest[1].split(" ", 2);
+                    CheckProjectExists checkProjectExists = new CheckProjectExists(addedProjects);
+                    Project project = checkProjectExists.getProject(projectTask[0]);
+
+                    if(project != null){
+                        String[] taskCmd = projectTask[1].split(" ", 2);
+                        String verifiedTaskId = taskCmd[1].replaceAll("[^a-zA-Z0-9]", "");
+                        project.getTasks().add(new Task( verifiedTaskId, taskCmd[0], false));
+                    }
+                }
                 break;
             case "check":
-                check(commandRest[1]);
-                break;
             case "uncheck":
-                uncheck(commandRest[1]);
+                FindTaskById findTaskById =  new FindTaskById(addedProjects);
+                Task task = findTaskById.getTask(commandRest[1]) ;
+                if(task != null) {
+                    CheckUnCheckTask checkTask = new CheckUnCheckTask(task);
+                    if(command.equals("check"))
+                        checkTask.setDoneUndone(true);
+                    else
+                        checkTask.setDoneUndone(false);
+                }
+                break;
+            case "deadline":
+                String[] cmd2 = commandRest[1].split(" ", 2);
+                FindTaskById taskById =  new FindTaskById(addedProjects);
+
+                Task task1 = taskById.getTask(cmd2[0]) ;
+                new SetDeadlineDate(task1).setDeadline(cmd2[1]);
+                break;
+            case "setDate":
+                String[] cmd3 = commandRest[1].split(" ", 2);
+                FindTaskById dateTask =  new FindTaskById(addedProjects);
+                Task taskDate = dateTask.getTask(cmd3[0]) ;
+
+                new SetTaskDate(taskDate).setCreatedDate(cmd3[1]);
+                break;
+            case "today":
+                DueTask dueTask =  new DueTask(addedProjects);
+                List<Task> tasks = dueTask.getTaskDueToday();
+                new DisplayTasks(tasks).display();
+                break;
+            case "delete":
+                FindProjectByTask findTask =  new FindProjectByTask(addedProjects);
+                Project projectTaskToDel = findTask.getProject(commandRest[1]);
+                if(projectTaskToDel != null){
+                    DeleteTask deleteTask = new DeleteTask(projectTaskToDel);
+                    deleteTask.deleteTaskFromProject(commandRest[1]);
+                }
+                break;
+            case "view_by_deadline":
+                try {
+                    Date deadLineDate = new SimpleDateFormat("dd-MM-yyyy").parse(commandRest[1]);
+                    TaskByDeadline deadLineTask =  new TaskByDeadline(addedProjects);
+                    new DisplayTasks(deadLineTask.getTaskByDeadLine(deadLineDate)).display();
+                }catch(ParseException e){
+                    System.out.println(e.toString());
+                }
+                break;
+            case "view_by_date":
+                try {
+                    Date createdDt = new SimpleDateFormat("dd-MM-yyyy").parse(commandRest[1]);
+                    TaskByDate createdTask =  new TaskByDate(addedProjects);
+                    new DisplayTasks(createdTask.getTaskByDate(createdDt)).display();
+                }catch(ParseException e){
+                    System.out.println(e.toString());
+                }
+                break;
+            case "view_by_project":
+                TasksByProject tasksByProject =  new TasksByProject(addedProjects);
+                List<Task> tasks_project = tasksByProject.getTaskByProject(commandRest[1]);
+                new DisplayTasks(tasks_project).display();
                 break;
             case "help":
                 help();
@@ -72,78 +139,15 @@ public final class TaskList implements Runnable {
     }
 
     private void show() {
-        for (Map.Entry<String, List<Task>> project : tasks.entrySet()) {
-            out.println(project.getKey());
-            for (Task task : project.getValue()) {
-                out.printf("    [%c] %d: %s%n", (task.isDone() ? 'x' : ' '), task.getId(), task.getDescription());
-            }
-            out.println();
-        }
-    }
-
-    private void add(String commandLine) {
-        String[] subcommandRest = commandLine.split(" ", 2);
-        String subcommand = subcommandRest[0];
-        if (subcommand.equals("project")) {
-            addProject(subcommandRest[1]);
-        } else if (subcommand.equals("task")) {
-            String[] projectTask = subcommandRest[1].split(" ", 2);
-            addTask(projectTask[0], projectTask[1]);
-        }
-    }
-
-    private void addProject(String name) {
-        tasks.put(name, new ArrayList<Task>());
-    }
-
-    private void addTask(String project, String description) {
-        List<Task> projectTasks = tasks.get(project);
-        if (projectTasks == null) {
-            out.printf("Could not find a project with the name \"%s\".", project);
-            out.println();
-            return;
-        }
-        projectTasks.add(new Task(nextId(), description, false));
-    }
-
-    private void check(String idString) {
-        setDone(idString, true);
-    }
-
-    private void uncheck(String idString) {
-        setDone(idString, false);
-    }
-
-    private void setDone(String idString, boolean done) {
-        int id = Integer.parseInt(idString);
-        for (Map.Entry<String, List<Task>> project : tasks.entrySet()) {
-            for (Task task : project.getValue()) {
-                if (task.getId() == id) {
-                    task.setDone(done);
-                    return;
-                }
-            }
-        }
-        out.printf("Could not find a task with an ID of %d.", id);
-        out.println();
+        new DisplayProjectsAndTasks(addedProjects).display();
     }
 
     private void help() {
-        out.println("Commands:");
-        out.println("  show");
-        out.println("  add project <project name>");
-        out.println("  add task <project name> <task description>");
-        out.println("  check <task ID>");
-        out.println("  uncheck <task ID>");
-        out.println();
+        new Helper().help();
     }
 
     private void error(String command) {
         out.printf("I don't know what the command \"%s\" is.", command);
         out.println();
-    }
-
-    private long nextId() {
-        return ++lastId;
     }
 }
